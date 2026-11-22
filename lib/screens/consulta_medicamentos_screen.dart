@@ -9,15 +9,21 @@ import 'detalle_medicamento_screen.dart';
 class ConsultaMedicamentosScreen extends StatefulWidget {
   final List<Medicamento> medicamentos;
   final bool cargando;
+  final bool cargandoMas;
+  final bool hayMasResultados;
   final String? error;
   final Future<void> Function(String consulta) onBuscar;
+  final Future<void> Function() onCargarMas;
 
   const ConsultaMedicamentosScreen({
     super.key,
     required this.medicamentos,
     required this.cargando,
+    required this.cargandoMas,
+    required this.hayMasResultados,
     required this.error,
     required this.onBuscar,
+    required this.onCargarMas,
   });
 
   @override
@@ -44,8 +50,14 @@ class _ConsultaMedicamentosScreenState
   @override
   void didUpdateWidget(covariant ConsultaMedicamentosScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.medicamentos != widget.medicamentos) {
-      _viaSeleccionada = 'TODAS';
+    if (oldWidget.medicamentos != widget.medicamentos &&
+        !widget.cargandoMas &&
+        oldWidget.medicamentos.length != widget.medicamentos.length) {
+      // Mantiene la vía seleccionada si se cargaron más páginas,
+      // pero la reinicia a 'TODAS' si cambió la búsqueda principal.
+      if (widget.medicamentos.length <= 100) {
+        _viaSeleccionada = 'TODAS';
+      }
     }
   }
 
@@ -69,6 +81,7 @@ class _ConsultaMedicamentosScreenState
       if (!mounted) return;
       if (textoLimpio != _ultimaBusquedaEnviada) {
         _ultimaBusquedaEnviada = textoLimpio;
+        _viaSeleccionada = 'TODAS';
         widget.onBuscar(textoLimpio);
       }
     });
@@ -76,6 +89,7 @@ class _ConsultaMedicamentosScreenState
 
   void _ejecutarBusquedaInmediata([String? termino]) {
     _debounceTimer?.cancel();
+    _viaSeleccionada = 'TODAS';
 
     if (termino == 'Todos') {
       _controladorBusqueda.clear();
@@ -127,16 +141,16 @@ class _ConsultaMedicamentosScreenState
             constraints: const BoxConstraints(maxWidth: 1140),
             child: Column(
               children: [
-                // 1. Cabecera Hero Hospitalaria con trazo ECG decorativo
+                // 1. Cabecera Hero Hospitalaria
                 Container(
                   margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color(0xFF0B4F6C), // Azul hospitalario profundo
-                        Color(0xFF0F766E), // Verde quirúrgico
-                        Color(0xFF0D9488), // Verde azulado clínico
+                        Color(0xFF0B4F6C),
+                        Color(0xFF0F766E),
+                        Color(0xFF0D9488),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -152,7 +166,6 @@ class _ConsultaMedicamentosScreenState
                   ),
                   child: Stack(
                     children: [
-                      // Trazo ECG brillante dentro del banner hospitalario
                       Positioned.fill(
                         child: IgnorePointer(
                           child: CustomPaint(painter: _BannerEcgPainter()),
@@ -163,37 +176,66 @@ class _ConsultaMedicamentosScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 11,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.28),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.local_hospital_rounded,
-                                    color: Colors.white,
-                                    size: 14,
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 11,
+                                    vertical: 5,
                                   ),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Estación Farmacéutica Hospitalaria • openFDA',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.28,
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.local_hospital_rounded,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Estación Farmacéutica Hospitalaria • openFDA',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (!widget.cargando &&
+                                    widget.medicamentos.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 11,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '${widget.medicamentos.length} medicamentos cargados',
+                                      style: const TextStyle(
+                                        color: Color(0xFF0B4F6C),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 10),
                             const Text(
@@ -207,7 +249,7 @@ class _ConsultaMedicamentosScreenState
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Escribe o borra en el buscador para actualizar automáticamente los fármacos en español.',
+                              'Catálogo ampliado hasta 100 registros por carga desde openFDA con paginación continua.',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.92),
                                 fontSize: 13,
@@ -215,7 +257,7 @@ class _ConsultaMedicamentosScreenState
                             ),
                             const SizedBox(height: 16),
 
-                            // Barra de búsqueda blanca elevada
+                            // Barra de búsqueda
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -420,7 +462,7 @@ class _ConsultaMedicamentosScreenState
                   ),
                 ],
 
-                // 3. Cuadrícula de tarjetas clínicas translúcidas
+                // 3. Cuadrícula de tarjetas + botón "Cargar más" al final
                 Expanded(
                   child: _construirCuerpo(medicamentosFiltrados, columnas),
                 ),
@@ -441,7 +483,7 @@ class _ConsultaMedicamentosScreenState
             CircularProgressIndicator(),
             SizedBox(height: 14),
             Text(
-              'Consultando medicamentos en openFDA...',
+              'Descargando catálogo de medicamentos desde openFDA...',
               style: TextStyle(
                 color: Color(0xFF334155),
                 fontWeight: FontWeight.w600,
@@ -507,11 +549,50 @@ class _ConsultaMedicamentosScreenState
     }
 
     final int totalFilas = (listaMostrar.length / columnas).ceil();
+    final bool mostrarPiePaginacion =
+        _viaSeleccionada == 'TODAS' && widget.hayMasResultados;
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-      itemCount: totalFilas,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      itemCount: totalFilas + (mostrarPiePaginacion ? 1 : 0),
       itemBuilder: (context, filaIndex) {
+        if (mostrarPiePaginacion && filaIndex == totalFilas) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 16),
+            child: Center(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0B4F6C),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: widget.cargandoMas ? null : widget.onCargarMas,
+                icon: widget.cargandoMas
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.add_circle_outline_rounded),
+                label: Text(
+                  widget.cargandoMas
+                      ? 'Cargando siguientes 100 medicamentos...'
+                      : 'Cargar 100 medicamentos más (${widget.medicamentos.length} actuales)',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          );
+        }
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(
@@ -661,7 +742,6 @@ class _ConsultaMedicamentosScreenState
   }
 }
 
-/// Dibuja un trazo sutil de monitor cardíaco en la esquina superior derecha del banner.
 class _BannerEcgPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

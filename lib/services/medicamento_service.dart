@@ -35,8 +35,6 @@ class MedicamentoService {
     'cetirizina': 'Cetirizine',
   };
 
-  /// Permite asociar manualmente un código de barras físico (ej. 770...)
-  /// con el nombre del medicamento para futuras lecturas con cámara.
   void vincularCodigoBarras(String codigoBarras, String nombreMedicamento) {
     final codigo = codigoBarras.trim();
     final nombre = nombreMedicamento.trim();
@@ -45,28 +43,24 @@ class MedicamentoService {
     }
   }
 
-  /// Busca un medicamento a partir del código de barras leído por la cámara.
   Future<List<Medicamento>> buscarPorCodigoBarras(String codigoLeido) async {
     final limpio = codigoLeido.trim();
     if (limpio.isEmpty) return [];
 
-    // 1. Verificar si esta caja ya fue vinculada manualmente en esta sesión
     if (_codigosBarrasVinculados.containsKey(limpio)) {
       return obtenerMedicamentos(
         consulta: _codigosBarrasVinculados[limpio]!,
-        limite: 5,
+        limite: 25,
       );
     }
 
-    // 2. Normalizar EAN-13 (13 dígitos) a UPC-A (12 dígitos quitando el 0 inicial)
     final sinCeroInicial = (limpio.length == 13 && limpio.startsWith('0'))
         ? limpio.substring(1)
         : limpio;
 
-    // 3. Consultar directamente en openFDA por el campo oficial openfda.upc
     try {
       final parametros = <String, String>{
-        'limit': '5',
+        'limit': '10',
         'search':
             '(openfda.upc:"$limpio" OR openfda.upc:"$sinCeroInicial" OR openfda.package_ndc:"$limpio")',
       };
@@ -92,11 +86,8 @@ class MedicamentoService {
           return lista;
         }
       }
-    } catch (_) {
-      // Si falla o no existe en openFDA, continuamos al respaldo internacional
-    }
+    } catch (_) {}
 
-    // 4. Respaldo: consultar nombre del producto en base abierta por código de barras
     try {
       final uriProducto = Uri.parse(
         'https://world.openfoodfacts.org/api/v2/product/$limpio.json',
@@ -116,11 +107,10 @@ class MedicamentoService {
                   .trim();
 
           if (nombreProducto.isNotEmpty) {
-            // Tomamos la primera palabra clave del nombre del producto para buscar en openFDA
             final palabraClave = nombreProducto.split(' ').first;
             final encontrados = await obtenerMedicamentos(
               consulta: palabraClave,
-              limite: 5,
+              limite: 10,
             );
             if (encontrados.isNotEmpty) {
               vincularCodigoBarras(limpio, palabraClave);
@@ -129,9 +119,7 @@ class MedicamentoService {
           }
         }
       }
-    } catch (_) {
-      // Si tampoco está en el catálogo abierto, retornamos lista vacía
-    }
+    } catch (_) {}
 
     return [];
   }
@@ -153,21 +141,28 @@ class MedicamentoService {
     return traducido.trim().isEmpty ? limpio : traducido.trim();
   }
 
+  /// Consulta hasta el máximo permitido por openFDA (100 registros por bloque)
+  /// y soporta paginación mediante [saltar] (parámetro `skip` de la API).
   Future<List<Medicamento>> obtenerMedicamentos({
     String consulta = '',
-    int limite = 20,
+    int limite = 100,
+    int saltar = 0,
   }) async {
     final textoOriginal = consulta.trim();
+    final int limiteSeguro = limite.clamp(1, 100);
 
-    final parametros = <String, String>{'limit': limite.toString()};
+    final parametros = <String, String>{
+      'limit': limiteSeguro.toString(),
+      if (saltar > 0) 'skip': saltar.toString(),
+    };
 
     if (textoOriginal.isNotEmpty) {
       final terminoIngles = await _prepararTerminoBusqueda(textoOriginal);
       parametros['search'] =
           '(openfda.brand_name:"$terminoIngles" OR openfda.generic_name:"$terminoIngles" OR openfda.substance_name:"$terminoIngles")';
     } else {
-      parametros['search'] =
-          '_exists_:openfda.brand_name AND _exists_:openfda.route';
+      // Trae todos los medicamentos registrados con nombre comercial en openFDA
+      parametros['search'] = '_exists_:openfda.brand_name';
     }
 
     final uri = Uri.parse(_baseUrl).replace(queryParameters: parametros);
@@ -175,7 +170,7 @@ class MedicamentoService {
     try {
       final respuesta = await http
           .get(uri)
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 18));
 
       if (respuesta.statusCode == 200) {
         final Map<String, dynamic> datosJson =
@@ -200,7 +195,7 @@ class MedicamentoService {
       }
     } on TimeoutException {
       throw Exception(
-        'La conexión con openFDA tardó más de 15 segundos. Revisa tu internet.',
+        'La conexión con openFDA tardó más de 18 segundos. Revisa tu internet.',
       );
     } catch (e) {
       if (e is Exception) {

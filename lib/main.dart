@@ -75,6 +75,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   int _indicePestana = 0;
   List<Medicamento> _medicamentos = <Medicamento>[];
   bool _cargando = true;
+  bool _cargandoMas = false;
+  bool _hayMasResultados = true;
+  String _consultaActual = '';
   String? _error;
 
   @override
@@ -83,21 +86,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     _cargarMedicamentos();
   }
 
+  /// Carga los primeros 100 medicamentos de la API al iniciar o al buscar.
   Future<void> _cargarMedicamentos([String consulta = '']) async {
     setState(() {
       _cargando = true;
       _error = null;
+      _consultaActual = consulta;
+      _hayMasResultados = true;
     });
 
     try {
       final resultados = await _servicio.obtenerMedicamentos(
         consulta: consulta,
-        limite: 20,
+        limite: 100,
+        saltar: 0,
       );
       if (!mounted) return;
       setState(() {
         _medicamentos = resultados;
         _cargando = false;
+        _hayMasResultados = resultados.length == 100;
       });
     } catch (e) {
       if (!mounted) return;
@@ -108,12 +116,46 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     }
   }
 
+  /// Descarga los siguientes 100 medicamentos de la API usando `skip`.
+  Future<void> _cargarMasMedicamentos() async {
+    if (_cargandoMas || !_hayMasResultados) return;
+
+    setState(() {
+      _cargandoMas = true;
+    });
+
+    try {
+      final nuevos = await _servicio.obtenerMedicamentos(
+        consulta: _consultaActual,
+        limite: 100,
+        saltar: _medicamentos.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _medicamentos = [..._medicamentos, ...nuevos];
+        _cargandoMas = false;
+        _hayMasResultados = nuevos.length == 100;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _cargandoMas = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudieron cargar más medicamentos: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   String _obtenerSubtituloAppBar() {
     switch (_indicePestana) {
       case 0:
         return 'Unidad de Consulta Farmacológica';
       case 1:
-        return 'Lectura de Códigos QR Clínicos';
+        return 'Lectura de Códigos de Barras y QR';
       default:
         return 'Panel Estadístico Clínico';
     }
@@ -125,8 +167,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       ConsultaMedicamentosScreen(
         medicamentos: _medicamentos,
         cargando: _cargando,
+        cargandoMas: _cargandoMas,
+        hayMasResultados: _hayMasResultados,
         error: _error,
         onBuscar: _cargarMedicamentos,
+        onCargarMas: _cargarMasMedicamentos,
       ),
       const EscanerQrScreen(),
       GraficasScreen(medicamentos: _medicamentos, cargando: _cargando),
@@ -177,7 +222,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
               child: IconButton.filledTonal(
                 tooltip: 'Actualizar datos de la API',
                 icon: const Icon(Icons.refresh_rounded),
-                onPressed: () => _cargarMedicamentos(),
+                onPressed: () => _cargarMedicamentos(_consultaActual),
               ),
             ),
           ],
