@@ -26,7 +26,10 @@ class _ConsultaMedicamentosScreenState
     extends State<ConsultaMedicamentosScreen> {
   final TextEditingController _controladorBusqueda = TextEditingController();
 
-  // Sugerencias rápidas en inglés porque openFDA indexa nombres en inglés.
+  // Guarda qué vía de administración está seleccionada en el filtro local.
+  String _viaSeleccionada = 'TODAS';
+
+  // Sugerencias rápidas para probar búsquedas en openFDA.
   final List<String> _sugerencias = const [
     'Ibuprofen',
     'Amoxicillin',
@@ -34,6 +37,16 @@ class _ConsultaMedicamentosScreenState
     'Aspirin',
     'Omeprazole',
   ];
+
+  @override
+  void didUpdateWidget(covariant ConsultaMedicamentosScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si llega una nueva lista desde la API, reiniciamos el filtro a TODAS
+    // para que el estudiante vea todos los resultados nuevos sin ocultar nada.
+    if (oldWidget.medicamentos != widget.medicamentos) {
+      _viaSeleccionada = 'TODAS';
+    }
+  }
 
   @override
   void dispose() {
@@ -49,11 +62,33 @@ class _ConsultaMedicamentosScreenState
     widget.onBuscar(texto);
   }
 
+  /// Extrae dinámicamente las vías únicas presentes en los medicamentos cargados.
+  List<String> _obtenerViasDisponibles() {
+    final vias = <String>{'TODAS'};
+    for (final med in widget.medicamentos) {
+      vias.add(med.viaPrincipalCorta);
+    }
+    return vias.toList();
+  }
+
+  /// Filtra la lista en memoria según el ChoiceChip seleccionado.
+  List<Medicamento> _filtrarMedicamentos() {
+    if (_viaSeleccionada == 'TODAS') {
+      return widget.medicamentos;
+    }
+    return widget.medicamentos
+        .where((med) => med.viaPrincipalCorta == _viaSeleccionada)
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final viasDisponibles = _obtenerViasDisponibles();
+    final medicamentosFiltrados = _filtrarMedicamentos();
+
     return Column(
       children: [
-        // Barra de búsqueda
+        // 1. Barra de búsqueda por texto
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: TextField(
@@ -92,9 +127,9 @@ class _ConsultaMedicamentosScreenState
           ),
         ),
 
-        // Chips de búsqueda rápida para facilitar pruebas
+        // 2. Chips de búsqueda rápida en la API
         SizedBox(
-          height: 44,
+          height: 42,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             scrollDirection: Axis.horizontal,
@@ -109,15 +144,52 @@ class _ConsultaMedicamentosScreenState
             },
           ),
         ),
+
+        // 3. Filtro local por vía de administración (se muestra cuando hay datos)
+        if (!widget.cargando &&
+            widget.error == null &&
+            widget.medicamentos.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 42,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: viasDisponibles.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final via = viasDisponibles[index];
+                final cantidad = via == 'TODAS'
+                    ? widget.medicamentos.length
+                    : widget.medicamentos
+                          .where((m) => m.viaPrincipalCorta == via)
+                          .length;
+                final etiqueta = via == 'TODAS'
+                    ? 'Todas ($cantidad)'
+                    : '$via ($cantidad)';
+
+                return ChoiceChip(
+                  label: Text(etiqueta),
+                  selected: _viaSeleccionada == via,
+                  onSelected: (_) {
+                    setState(() {
+                      _viaSeleccionada = via;
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
 
-        // Contenido dinámico: cargando, error, vacío o lista de resultados
-        Expanded(child: _construirCuerpo()),
+        // 4. Lista de resultados filtrados
+        Expanded(child: _construirCuerpo(medicamentosFiltrados)),
       ],
     );
   }
 
-  Widget _construirCuerpo() {
+  Widget _construirCuerpo(List<Medicamento> listaMostrar) {
     if (widget.cargando) {
       return const Center(
         child: Column(
@@ -153,12 +225,12 @@ class _ConsultaMedicamentosScreenState
       );
     }
 
-    if (widget.medicamentos.isEmpty) {
+    if (listaMostrar.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'No se encontraron medicamentos con ese término.\nPrueba con otro nombre como Ibuprofen o Amoxicillin.',
+            'No se encontraron medicamentos con ese filtro o término.\nPrueba con otro nombre como Ibuprofen o selecciona "Todas".',
             textAlign: TextAlign.center,
           ),
         ),
@@ -167,9 +239,9 @@ class _ConsultaMedicamentosScreenState
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      itemCount: widget.medicamentos.length,
+      itemCount: listaMostrar.length,
       itemBuilder: (context, index) {
-        final med = widget.medicamentos[index];
+        final med = listaMostrar[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
@@ -198,7 +270,7 @@ class _ConsultaMedicamentosScreenState
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  'Vía: ${med.viaPrincipalCorta} • ${med.formaFarmaceutica}',
+                  'Vía: ${med.viaPrincipalCorta} •${med.formaFarmaceutica}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

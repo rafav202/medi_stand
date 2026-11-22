@@ -23,6 +23,26 @@ class GraficasScreen extends StatelessWidget {
     return conteo;
   }
 
+  /// Agrupa los medicamentos según su tipo de comercialización (Venta libre vs. Prescripción).
+  Map<String, int> _contarPorTipoProducto() {
+    final conteo = <String, int>{};
+    for (final med in medicamentos) {
+      final tipoBruto = med.formaFarmaceutica.trim().toUpperCase();
+      String categoria;
+      if (tipoBruto.contains('OTC')) {
+        categoria = 'Venta Libre (OTC)';
+      } else if (tipoBruto.contains('PRESCRIPTION')) {
+        categoria = 'Fórmula Médica';
+      } else if (tipoBruto == 'NO REGISTRADA' || tipoBruto.isEmpty) {
+        categoria = 'No especificado';
+      } else {
+        categoria = tipoBruto;
+      }
+      conteo[categoria] = (conteo[categoria] ?? 0) + 1;
+    }
+    return conteo;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (cargando) {
@@ -34,22 +54,26 @@ class GraficasScreen extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'No hay datos suficientes para graficar.\nRealiza primero una búsqueda en la pestaña Consulta.',
+            'No hay datos suficientes para graficar.\nRealiza primero una búsqueda en la pestaña Medicamentos.',
             textAlign: TextAlign.center,
           ),
         ),
       );
     }
 
+    // Datos para Gráfica 1: Barras por Vía de Administración
     final datosPorVia = _contarPorVia();
-    final entradas = datosPorVia.entries.toList()
+    final entradasVia = datosPorVia.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topVias = entradasVia.take(6).toList();
+    final maxValorVia = topVias.first.value.toDouble();
+
+    // Datos para Gráfica 2: Circular (PieChart) por Tipo de Producto
+    final datosPorTipo = _contarPorTipoProducto();
+    final entradasTipo = datosPorTipo.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // Tomamos máximo las 6 vías más frecuentes para que la gráfica sea legible.
-    final topVias = entradas.take(6).toList();
-    final maxValor = topVias.first.value.toDouble();
-
-    final colores = <Color>[
+    final coloresBarras = <Color>[
       Colors.teal,
       Colors.blue,
       Colors.indigo,
@@ -58,10 +82,17 @@ class GraficasScreen extends StatelessWidget {
       Colors.green,
     ];
 
+    final coloresTorta = <Color>[
+      Colors.teal,
+      Colors.deepOrange,
+      Colors.indigo,
+      Colors.amber.shade700,
+    ];
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Resumen numérico superior
+        // 1. Tarjetas de resumen superior
         Row(
           children: [
             Expanded(
@@ -85,7 +116,7 @@ class GraficasScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Tarjeta con gráfica de barras en fl_chart
+        // 2. Gráfica de Barras: Distribución por Vía de Administración
         Card(
           elevation: 2,
           child: Padding(
@@ -94,7 +125,7 @@ class GraficasScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Distribución por Vía de Administración',
+                  '1. Distribución por Vía de Administración',
                   style: Theme.of(context).textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),
@@ -109,7 +140,7 @@ class GraficasScreen extends StatelessWidget {
                   child: BarChart(
                     BarChartData(
                       alignment: BarChartAlignment.spaceAround,
-                      maxY: maxValor + 1,
+                      maxY: maxValorVia + 1,
                       barTouchData: BarTouchData(enabled: true),
                       titlesData: FlTitlesData(
                         topTitles: const AxisTitles(
@@ -143,9 +174,10 @@ class GraficasScreen extends StatelessWidget {
                               if (index < 0 || index >= topVias.length) {
                                 return const SizedBox.shrink();
                               }
+                              // Subimos el límite a 12 caracteres para que OPHTHALMIC se lea completo
                               final etiqueta = topVias[index].key;
-                              final corta = etiqueta.length > 8
-                                  ? '${etiqueta.substring(0, 8)}...'
+                              final corta = etiqueta.length > 12
+                                  ? '${etiqueta.substring(0, 12)}...'
                                   : etiqueta;
                               return Padding(
                                 padding: const EdgeInsets.only(top: 8),
@@ -172,7 +204,7 @@ class GraficasScreen extends StatelessWidget {
                           barRods: [
                             BarChartRodData(
                               toY: topVias[i].value.toDouble(),
-                              color: colores[i % colores.length],
+                              color: coloresBarras[i % coloresBarras.length],
                               width: 22,
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(6),
@@ -184,37 +216,103 @@ class GraficasScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Desglose detallado en lista
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Detalle numérico por categoría',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
+                const Divider(height: 24),
                 ...List.generate(topVias.length, (i) {
                   final item = topVias[i];
                   final porcentaje = (item.value / medicamentos.length * 100)
                       .toStringAsFixed(1);
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
                         Container(
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: colores[i % colores.length],
+                            color: coloresBarras[i % coloresBarras.length],
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            item.key,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        Text(
+                          '${item.value} ($porcentaje%)',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 3. Segunda Gráfica (Circular / PieChart): Venta Libre vs. Fórmula Médica
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '2. Clasificación por Tipo de Dispensación',
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Proporción entre venta libre (OTC) y medicamentos con fórmula médica',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 210,
+                  child: PieChart(
+                    PieChartData(
+                      sectionsSpace: 3,
+                      centerSpaceRadius: 38,
+                      sections: List.generate(entradasTipo.length, (i) {
+                        final item = entradasTipo[i];
+                        final porcentaje =
+                            (item.value / medicamentos.length * 100)
+                                .toStringAsFixed(0);
+                        return PieChartSectionData(
+                          value: item.value.toDouble(),
+                          title: '$porcentaje%',
+                          color: coloresTorta[i % coloresTorta.length],
+                          radius: 56,
+                          titleStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+                const Divider(height: 24),
+                ...List.generate(entradasTipo.length, (i) {
+                  final item = entradasTipo[i];
+                  final porcentaje = (item.value / medicamentos.length * 100)
+                      .toStringAsFixed(1);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: coloresTorta[i % coloresTorta.length],
                             shape: BoxShape.circle,
                           ),
                         ),
