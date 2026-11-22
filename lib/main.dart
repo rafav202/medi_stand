@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'models/medicamento.dart';
 import 'screens/consulta_medicamentos_screen.dart';
+import 'screens/escaner_qr_screen.dart';
 import 'screens/graficas_screen.dart';
 import 'services/medicamento_service.dart';
 import 'widgets/fondo_hospitalario.dart';
@@ -28,7 +29,6 @@ class MediStandApp extends StatelessWidget {
           brightness: Brightness.light,
           surface: Colors.white,
         ),
-        // Hacemos el fondo del Scaffold transparente para que luzca FondoHospitalario
         scaffoldBackgroundColor: Colors.transparent,
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.white.withValues(alpha: 0.92),
@@ -108,6 +108,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     }
   }
 
+  String _obtenerSubtituloAppBar() {
+    switch (_indicePestana) {
+      case 0:
+        return 'Unidad de Consulta Farmacológica';
+      case 1:
+        return 'Lectura de Códigos QR Clínicos';
+      default:
+        return 'Panel Estadístico Clínico';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pantallas = <Widget>[
@@ -117,17 +128,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         error: _error,
         onBuscar: _cargarMedicamentos,
       ),
+      const EscanerQrScreen(),
       GraficasScreen(medicamentos: _medicamentos, cargando: _cargando),
     ];
 
     return FondoHospitalario(
       child: Scaffold(
         appBar: AppBar(
-          title: MediStandLogo(
-            subtitulo: _indicePestana == 0
-                ? 'Unidad de Consulta Farmacológica'
-                : 'Panel Estadístico Clínico',
-          ),
+          title: MediStandLogo(subtitulo: _obtenerSubtituloAppBar()),
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1),
             child: Container(
@@ -136,7 +144,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
             ),
           ),
           actions: [
-            // Indicador visual estilo monitor de hospital conectado
             Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -201,6 +208,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                   color: Color(0xFF0D9488),
                 ),
                 label: 'Medicamentos',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.qr_code_scanner_outlined),
+                selectedIcon: Icon(
+                  Icons.qr_code_scanner,
+                  color: Color(0xFF0D9488),
+                ),
+                label: 'Escanear QR',
               ),
               NavigationDestination(
                 icon: Icon(Icons.bar_chart_outlined),

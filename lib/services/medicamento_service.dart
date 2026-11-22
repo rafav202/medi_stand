@@ -10,8 +10,11 @@ class MedicamentoService {
   static const String _dailyMedBaseUrl =
       'https://dailymed.nlm.nih.gov/dailymed/services/v2/spls';
 
-  /// Diccionario rápido para términos farmacéuticos comunes en español -> inglés
-  /// antes de consultar openFDA.
+  /// Memoria temporal de códigos de barras locales (ej. 770...) vinculados
+  /// durante la sesión para que al volver a escanear la misma caja abra directo.
+  static final Map<String, String> _codigosBarrasVinculados = {};
+
+  /// Diccionario rápido para términos farmacéuticos comunes en español -> inglés.
   static const Map<String, String> _diccionarioFarmaceutico = {
     'ibuprofeno': 'Ibuprofen',
     'amoxicilina': 'Amoxicillin',
@@ -32,8 +35,107 @@ class MedicamentoService {
     'cetirizina': 'Cetirizine',
   };
 
-  /// Convierte el término de búsqueda de español a inglés si es necesario
-  /// para que openFDA encuentre resultados.
+  /// Permite asociar manualmente un código de barras físico (ej. 770...)
+  /// con el nombre del medicamento para futuras lecturas con cámara.
+  void vincularCodigoBarras(String codigoBarras, String nombreMedicamento) {
+    final codigo = codigoBarras.trim();
+    final nombre = nombreMedicamento.trim();
+    if (codigo.isNotEmpty && nombre.isNotEmpty) {
+      _codigosBarrasVinculados[codigo] = nombre;
+    }
+  }
+
+  /// Busca un medicamento a partir del código de barras leído por la cámara.
+  Future<List<Medicamento>> buscarPorCodigoBarras(String codigoLeido) async {
+    final limpio = codigoLeido.trim();
+    if (limpio.isEmpty) return [];
+
+    // 1. Verificar si esta caja ya fue vinculada manualmente en esta sesión
+    if (_codigosBarrasVinculados.containsKey(limpio)) {
+      return obtenerMedicamentos(
+        consulta: _codigosBarrasVinculados[limpio]!,
+        limite: 5,
+      );
+    }
+
+    // 2. Normalizar EAN-13 (13 dígitos) a UPC-A (12 dígitos quitando el 0 inicial)
+    final sinCeroInicial = (limpio.length == 13 && limpio.startsWith('0'))
+        ? limpio.substring(1)
+        : limpio;
+
+    // 3. Consultar directamente en openFDA por el campo oficial openfda.upc
+    try {
+      final parametros = <String, String>{
+        'limit': '5',
+        'search':
+            '(openfda.upc:"$limpio" OR openfda.upc:"$sinCeroInicial" OR openfda.package_ndc:"$limpio")',
+      };
+
+      final uri = Uri.parse(_baseUrl).replace(queryParameters: parametros);
+      final respuesta = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 12));
+
+      if (respuesta.statusCode == 200) {
+        final Map<String, dynamic> datosJson =
+            json.decode(respuesta.body) as Map<String, dynamic>;
+        final List<dynamic> resultados =
+            (datosJson['results'] as List<dynamic>?) ?? [];
+
+        final lista = <Medicamento>[];
+        for (final item in resultados) {
+          if (item is Map<String, dynamic>) {
+            lista.add(Medicamento.fromOpenFdaJson(item));
+          }
+        }
+        if (lista.isNotEmpty) {
+          return lista;
+        }
+      }
+    } catch (_) {
+      // Si falla o no existe en openFDA, continuamos al respaldo internacional
+    }
+
+    // 4. Respaldo: consultar nombre del producto en base abierta por código de barras
+    try {
+      final uriProducto = Uri.parse(
+        'https://world.openfoodfacts.org/api/v2/product/$limpio.json',
+      );
+      final respProducto = await http
+          .get(uriProducto)
+          .timeout(const Duration(seconds: 8));
+
+      if (respProducto.statusCode == 200) {
+        final Map<String, dynamic> data =
+            json.decode(respProducto.body) as Map<String, dynamic>;
+        if (data['status'] == 1 && data['product'] is Map<String, dynamic>) {
+          final producto = data['product'] as Map<String, dynamic>;
+          final nombreProducto =
+              (producto['product_name'] ?? producto['generic_name'] ?? '')
+                  .toString()
+                  .trim();
+
+          if (nombreProducto.isNotEmpty) {
+            // Tomamos la primera palabra clave del nombre del producto para buscar en openFDA
+            final palabraClave = nombreProducto.split(' ').first;
+            final encontrados = await obtenerMedicamentos(
+              consulta: palabraClave,
+              limite: 5,
+            );
+            if (encontrados.isNotEmpty) {
+              vincularCodigoBarras(limpio, palabraClave);
+              return encontrados;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // Si tampoco está en el catálogo abierto, retornamos lista vacía
+    }
+
+    return [];
+  }
+
   Future<String> _prepararTerminoBusqueda(String consulta) async {
     final limpio = consulta.trim().replaceAll('"', '');
     if (limpio.isEmpty) return '';
@@ -43,7 +145,6 @@ class MedicamentoService {
       return _diccionarioFarmaceutico[clave]!;
     }
 
-    // Si el estudiante escribe otro medicamento en español, lo traducimos al inglés
     final traducido = await traducirTexto(
       limpio,
       idiomaOrigen: 'es',
@@ -52,7 +153,6 @@ class MedicamentoService {
     return traducido.trim().isEmpty ? limpio : traducido.trim();
   }
 
-  /// Consulta la API pública de openFDA.
   Future<List<Medicamento>> obtenerMedicamentos({
     String consulta = '',
     int limite = 20,
@@ -66,7 +166,6 @@ class MedicamentoService {
       parametros['search'] =
           '(openfda.brand_name:"$terminoIngles" OR openfda.generic_name:"$terminoIngles" OR openfda.substance_name:"$terminoIngles")';
     } else {
-      // Carga inicial variada (Oral, Tópica, Oftálmica, etc.)
       parametros['search'] =
           '_exists_:openfda.brand_name AND _exists_:openfda.route';
     }
@@ -83,7 +182,7 @@ class MedicamentoService {
             json.decode(respuesta.body) as Map<String, dynamic>;
 
         final List<dynamic> resultados =
-            (datosJson['results'] as List<dynamic>?) ?? <dynamic>[];
+            (datosJson['results'] as List<dynamic>?) ?? [];
 
         final listaMedicamentos = <Medicamento>[];
         for (final item in resultados) {
@@ -93,7 +192,7 @@ class MedicamentoService {
         }
         return listaMedicamentos;
       } else if (respuesta.statusCode == 404) {
-        return <Medicamento>[];
+        return [];
       } else {
         throw Exception(
           'Error al conectar con openFDA (Código HTTP: ${respuesta.statusCode})',
@@ -111,8 +210,6 @@ class MedicamentoService {
     }
   }
 
-  /// Traduce textos clínicos largos dividiéndolos en bloques seguros
-  /// para que toda la ficha del medicamento se lea en español.
   Future<String> traducirTexto(
     String texto, {
     String idiomaOrigen = 'en',
@@ -127,7 +224,6 @@ class MedicamentoService {
       return limpio;
     }
 
-    // Dividimos textos muy largos en fragmentos de máximo 1100 caracteres
     final fragmentos = _dividirEnFragmentos(limpio, 1100);
     final resultadoFinal = StringBuffer();
 
@@ -166,7 +262,6 @@ class MedicamentoService {
           resultadoFinal.write('$fragmento ');
         }
       } catch (_) {
-        // Si falla la traducción de un bloque, conserva el texto original
         resultadoFinal.write('$fragmento ');
       }
     }
@@ -176,7 +271,7 @@ class MedicamentoService {
   }
 
   List<String> _dividirEnFragmentos(String texto, int maxLargo) {
-    if (texto.length <= maxLargo) return <String>[texto];
+    if (texto.length <= maxLargo) return [texto];
 
     final fragmentos = <String>[];
     int inicio = 0;
@@ -187,7 +282,6 @@ class MedicamentoService {
         fragmentos.add(texto.substring(inicio));
         break;
       }
-      // Intentar cortar en un punto o espacio para no partir palabras a la mitad
       int corte = texto.lastIndexOf('. ', fin);
       if (corte <= inicio) {
         corte = texto.lastIndexOf(' ', fin);
@@ -204,11 +298,10 @@ class MedicamentoService {
     return fragmentos;
   }
 
-  /// Consulta las URLs de imágenes reales en DailyMed (NIH).
   Future<List<String>> obtenerImagenesMedicamento(String setId) async {
     final idLimpio = setId.trim();
     if (idLimpio.isEmpty) {
-      return <String>[];
+      return [];
     }
 
     final uri = Uri.parse('$_dailyMedBaseUrl/$idLimpio/media.json');
@@ -219,14 +312,14 @@ class MedicamentoService {
           .timeout(const Duration(seconds: 10));
 
       if (respuesta.statusCode != 200) {
-        return <String>[];
+        return [];
       }
 
       final Map<String, dynamic> datosJson =
           json.decode(respuesta.body) as Map<String, dynamic>;
       final dynamic data = datosJson['data'];
 
-      List<dynamic> mediaLista = <dynamic>[];
+      List<dynamic> mediaLista = [];
       if (data is Map<String, dynamic> && data['media'] is List<dynamic>) {
         mediaLista = data['media'] as List<dynamic>;
       } else if (data is List<dynamic>) {
@@ -248,7 +341,7 @@ class MedicamentoService {
       }
       return urlsImagenes;
     } catch (_) {
-      return <String>[];
+      return [];
     }
   }
 }

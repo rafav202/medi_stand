@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/medicamento.dart';
 import '../services/medicamento_service.dart';
@@ -94,6 +95,122 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
     );
   }
 
+  /// Muestra una ventana emergente con el código QR único del medicamento
+  /// para que pueda ser escaneado desde el tótem Medi-Stand.
+  void _mostrarDialogoQr() {
+    final med = widget.medicamento;
+    final datosQr = 'MEDISTAND:${med.nombre}';
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.qr_code_2_rounded,
+                        size: 16,
+                        color: Color(0xFF0D9488),
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Etiqueta QR • Medi-Stand',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0D9488),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  med.nombre,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  med.principioActivo,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Código QR generado dinámicamente con qr_flutter
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: const Color(0xFFE2E8F0),
+                      width: 2,
+                    ),
+                  ),
+                  child: QrImageView(
+                    data: datosQr,
+                    version: QrVersions.auto,
+                    size: 200,
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Código: $datosQr',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Escanea este código desde la pestaña "Escanear QR" para abrir esta ficha al instante.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cerrar'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final med = widget.medicamento;
@@ -103,6 +220,14 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
         appBar: AppBar(
           title: const MediStandLogo(subtitulo: 'Historia Farmacológica'),
           actions: [
+            // Botón para generar el código QR del medicamento
+            IconButton.filledTonal(
+              tooltip: 'Generar código QR del medicamento',
+              icon: const Icon(Icons.qr_code_2_rounded),
+              onPressed: _mostrarDialogoQr,
+            ),
+            const SizedBox(width: 8),
+            // Botón para alternar traducción Español / Inglés
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: ActionChip(
@@ -116,7 +241,7 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
                 label: Text(
                   _traduciendo
                       ? 'Traduciendo...'
-                      : (_mostrarEnEspanol ? 'Español' : 'Inglés (Original)'),
+                      : (_mostrarEnEspanol ? 'Español' : 'Inglés'),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
