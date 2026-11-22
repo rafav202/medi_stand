@@ -1,4 +1,5 @@
 class Medicamento {
+  final String setId;
   final String nombre;
   final String principioActivo;
   final String viaAdministracion;
@@ -11,6 +12,7 @@ class Medicamento {
   final String efectosAdversos;
 
   Medicamento({
+    required this.setId,
     required this.nombre,
     required this.principioActivo,
     required this.viaAdministracion,
@@ -44,13 +46,16 @@ class Medicamento {
     return textoLimpio.isEmpty ? porDefecto : textoLimpio;
   }
 
-  /// Toma la primera vía de administración corta para agrupar en las gráficas.
+  /// Toma la primera vía de administración corta para agrupar en las gráficas y filtros.
   String get viaPrincipalCorta {
     final primeraLinea = viaAdministracion.split('\n').first.trim();
     final primeraVia = primeraLinea.split(',').first.trim();
     if (primeraVia.isEmpty) return 'NO REGISTRADA';
     return primeraVia.toUpperCase();
   }
+
+  /// Indica si el medicamento es de venta libre (OTC) o requiere fórmula médica.
+  bool get esVentaLibre => formaFarmaceutica.toUpperCase().contains('OTC');
 
   /// Construye un objeto Medicamento a partir de un elemento JSON de openFDA.
   factory Medicamento.fromOpenFdaJson(Map<String, dynamic> json) {
@@ -59,6 +64,7 @@ class Medicamento {
         : <String, dynamic>{};
 
     return Medicamento(
+      setId: _textoSeguro(json['set_id'] ?? openFda['spl_set_id'], ''),
       nombre: _textoSeguro(
         openFda['brand_name'] ?? openFda['generic_name'],
         'Medicamento sin nombre comercial',

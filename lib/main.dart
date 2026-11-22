@@ -4,6 +4,7 @@ import 'models/medicamento.dart';
 import 'screens/consulta_medicamentos_screen.dart';
 import 'screens/graficas_screen.dart';
 import 'services/medicamento_service.dart';
+import 'widgets/medi_stand_logo.dart';
 
 void main() {
   runApp(const MediStandApp());
@@ -83,10 +84,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _indicePestana == 0
-              ? 'Medi-Stand • Consulta'
-              : 'Medi-Stand • Gráficas',
+        title: MediStandLogo(
+          subtitulo: _indicePestana == 0
+              ? 'Consulta Farmacológica'
+              : 'Estadísticas y Gráficas',
         ),
         actions: [
           IconButton(

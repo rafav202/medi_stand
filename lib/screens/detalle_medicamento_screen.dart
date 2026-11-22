@@ -1,115 +1,96 @@
 import 'package:flutter/material.dart';
 
 import '../models/medicamento.dart';
+import '../services/medicamento_service.dart';
+import '../widgets/medi_stand_logo.dart';
+import '../widgets/medicamento_visual.dart';
 
-class DetalleMedicamentoScreen extends StatelessWidget {
+class DetalleMedicamentoScreen extends StatefulWidget {
   final Medicamento medicamento;
 
   const DetalleMedicamentoScreen({super.key, required this.medicamento});
 
   @override
+  State<DetalleMedicamentoScreen> createState() =>
+      _DetalleMedicamentoScreenState();
+}
+
+class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
+  final MedicamentoService _servicio = MedicamentoService();
+  List<String> _urlsImagenes = <String>[];
+  bool _cargandoImagenes = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarFotos();
+  }
+
+  Future<void> _cargarFotos() async {
+    final fotos = await _servicio.obtenerImagenesMedicamento(
+      widget.medicamento.setId,
+    );
+    if (!mounted) return;
+    setState(() {
+      _urlsImagenes = fotos;
+      _cargandoImagenes = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final esquemaColor = Theme.of(context).colorScheme;
+    final med = widget.medicamento;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ficha del Medicamento')),
+      appBar: AppBar(title: const MediStandLogo(subtitulo: 'Ficha Clínica')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Tarjeta principal de identificación
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: esquemaColor.primaryContainer,
-                        child: Icon(
-                          Icons.medication,
-                          color: esquemaColor.onPrimaryContainer,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          medicamento.nombre,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 24),
-                  _filaDato('Principio activo', medicamento.principioActivo),
-                  _filaDato(
-                    'Vía de administración',
-                    medicamento.viaAdministracion,
-                  ),
-                  _filaDato(
-                    'Forma farmacéutica',
-                    medicamento.formaFarmaceutica,
-                  ),
-                  _filaDato('Fabricante / Titular', medicamento.fabricante),
-                ],
-              ),
-            ),
+          // Banner visual + galería de fotos del medicamento
+          MedicamentoBannerVisual(
+            medicamento: med,
+            urlsImagenes: _urlsImagenes,
+            cargandoImagenes: _cargandoImagenes,
           ),
           const SizedBox(height: 12),
 
-          // Secciones clínicas detalladas para el estudiante
+          // Secciones clínicas detalladas
           _seccionInfo(
             context,
             titulo: 'Indicaciones y uso',
-            contenido: medicamento.indicaciones,
+            contenido: med.indicaciones,
             icono: Icons.info_outline,
+            color: Colors.teal,
           ),
           _seccionInfo(
             context,
             titulo: 'Dosificación y administración',
-            contenido: medicamento.dosificacion,
+            contenido: med.dosificacion,
             icono: Icons.schedule,
+            color: Colors.blue,
           ),
           _seccionInfo(
             context,
             titulo: 'Advertencias y precauciones',
-            contenido: medicamento.advertencias,
+            contenido: med.advertencias,
             icono: Icons.warning_amber_rounded,
+            color: Colors.orange.shade800,
           ),
           _seccionInfo(
             context,
             titulo: 'Contraindicaciones',
-            contenido: medicamento.contraindicaciones,
+            contenido: med.contraindicaciones,
             icono: Icons.block,
+            color: Colors.red.shade700,
           ),
           _seccionInfo(
             context,
             titulo: 'Reacciones o efectos adversos',
-            contenido: medicamento.efectosAdversos,
+            contenido: med.efectosAdversos,
             icono: Icons.health_and_safety_outlined,
+            color: Colors.purple,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _filaDato(String etiqueta, String valor) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(color: Colors.black87, fontSize: 14),
-          children: [
-            TextSpan(
-              text: '$etiqueta: ',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextSpan(text: valor),
-          ],
-        ),
       ),
     );
   }
@@ -119,6 +100,7 @@ class DetalleMedicamentoScreen extends StatelessWidget {
     required String titulo,
     required String contenido,
     required IconData icono,
+    required Color color,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -129,12 +111,15 @@ class DetalleMedicamentoScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  icono,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.primary,
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icono, size: 20, color: color),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     titulo,
@@ -146,8 +131,8 @@ class DetalleMedicamentoScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(contenido, style: const TextStyle(fontSize: 14, height: 1.4)),
+            const SizedBox(height: 10),
+            Text(contenido, style: const TextStyle(fontSize: 14, height: 1.45)),
           ],
         ),
       ),

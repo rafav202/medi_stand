@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/medicamento.dart';
+import '../widgets/medicamento_visual.dart';
 import 'detalle_medicamento_screen.dart';
 
 class ConsultaMedicamentosScreen extends StatefulWidget {
@@ -25,11 +26,8 @@ class ConsultaMedicamentosScreen extends StatefulWidget {
 class _ConsultaMedicamentosScreenState
     extends State<ConsultaMedicamentosScreen> {
   final TextEditingController _controladorBusqueda = TextEditingController();
-
-  // Guarda qué vía de administración está seleccionada en el filtro local.
   String _viaSeleccionada = 'TODAS';
 
-  // Sugerencias rápidas para probar búsquedas en openFDA.
   final List<String> _sugerencias = const [
     'Ibuprofen',
     'Amoxicillin',
@@ -41,8 +39,6 @@ class _ConsultaMedicamentosScreenState
   @override
   void didUpdateWidget(covariant ConsultaMedicamentosScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Si llega una nueva lista desde la API, reiniciamos el filtro a TODAS
-    // para que el estudiante vea todos los resultados nuevos sin ocultar nada.
     if (oldWidget.medicamentos != widget.medicamentos) {
       _viaSeleccionada = 'TODAS';
     }
@@ -62,7 +58,6 @@ class _ConsultaMedicamentosScreenState
     widget.onBuscar(texto);
   }
 
-  /// Extrae dinámicamente las vías únicas presentes en los medicamentos cargados.
   List<String> _obtenerViasDisponibles() {
     final vias = <String>{'TODAS'};
     for (final med in widget.medicamentos) {
@@ -71,7 +66,6 @@ class _ConsultaMedicamentosScreenState
     return vias.toList();
   }
 
-  /// Filtra la lista en memoria según el ChoiceChip seleccionado.
   List<Medicamento> _filtrarMedicamentos() {
     if (_viaSeleccionada == 'TODAS') {
       return widget.medicamentos;
@@ -88,7 +82,6 @@ class _ConsultaMedicamentosScreenState
 
     return Column(
       children: [
-        // 1. Barra de búsqueda por texto
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: TextField(
@@ -126,8 +119,6 @@ class _ConsultaMedicamentosScreenState
             onChanged: (_) => setState(() {}),
           ),
         ),
-
-        // 2. Chips de búsqueda rápida en la API
         SizedBox(
           height: 42,
           child: ListView.separated(
@@ -138,14 +129,13 @@ class _ConsultaMedicamentosScreenState
             itemBuilder: (context, index) {
               final nombre = _sugerencias[index];
               return ActionChip(
+                avatar: const Icon(Icons.bolt, size: 16),
                 label: Text(nombre),
                 onPressed: () => _ejecutarBusqueda(nombre),
               );
             },
           ),
         ),
-
-        // 3. Filtro local por vía de administración (se muestra cuando hay datos)
         if (!widget.cargando &&
             widget.error == null &&
             widget.medicamentos.isNotEmpty) ...[
@@ -182,8 +172,6 @@ class _ConsultaMedicamentosScreenState
           ),
         ],
         const SizedBox(height: 8),
-
-        // 4. Lista de resultados filtrados
         Expanded(child: _construirCuerpo(medicamentosFiltrados)),
       ],
     );
@@ -242,18 +230,16 @@ class _ConsultaMedicamentosScreenState
       itemCount: listaMostrar.length,
       itemBuilder: (context, index) {
         final med = listaMostrar[index];
+        final estiloVia = EstiloViaMedicamento.obtener(med.viaPrincipalCorta);
+
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
-              vertical: 8,
+              vertical: 10,
             ),
-            leading: CircleAvatar(
-              child: Text(
-                med.nombre.isNotEmpty ? med.nombre[0].toUpperCase() : 'M',
-              ),
-            ),
+            leading: MedicamentoAvatar(medicamento: med),
             title: Text(
               med.nombre,
               maxLines: 1,
@@ -269,14 +255,24 @@ class _ConsultaMedicamentosScreenState
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  'Vía: ${med.viaPrincipalCorta} •${med.formaFarmaceutica}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _etiquetaMini(
+                      texto: med.viaPrincipalCorta,
+                      color: estiloVia.color,
+                    ),
+                    _etiquetaMini(
+                      texto: med.esVentaLibre
+                          ? 'Venta Libre (OTC)'
+                          : 'Fórmula Médica',
+                      color: med.esVentaLibre
+                          ? Colors.green.shade700
+                          : Colors.deepPurple,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -292,6 +288,24 @@ class _ConsultaMedicamentosScreenState
           ),
         );
       },
+    );
+  }
+
+  Widget _etiquetaMini({required String texto, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
     );
   }
 }
