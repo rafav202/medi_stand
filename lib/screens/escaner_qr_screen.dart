@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../services/medicamento_service.dart';
@@ -12,15 +14,28 @@ class EscanerQrScreen extends StatefulWidget {
 }
 
 class _EscanerQrScreenState extends State<EscanerQrScreen> {
+  // Usamos DetectionSpeed.normal para que no bloquee lecturas si el primer intento fue borroso
   final MobileScannerController _scannerController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    detectionSpeed: DetectionSpeed.normal,
+    formats: const [BarcodeFormat.all],
   );
+
   final MedicamentoService _servicio = MedicamentoService();
+  final TextEditingController _controladorCodigoManual =
+      TextEditingController();
 
   bool _procesando = false;
   String? _ultimoCodigoLeido;
+  String _mensajeEstado =
+      'Cámara lista. Apunta un código de barras o QR al recuadro.';
 
-  // Códigos de barras comerciales reales (UPC/EAN) para probar sin cámara web
+  // Verifica si la plataforma actual soporta cámara con mobile_scanner (Web, Android, iOS, macOS)
+  bool get _soportaCamaraNativa =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
   final _codigosPrueba = const [
     {
       'titulo': 'Barras • Advil Ibuprofen (0305730164207)',
@@ -43,21 +58,46 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
   @override
   void dispose() {
     _scannerController.dispose();
+    _controladorCodigoManual.dispose();
     super.dispose();
   }
 
-  /// Determina si el código leído por la cámara es un código de barras numérico
-  /// (EAN-13 / UPC-A) o un código QR textual, y busca el medicamento en openFDA.
+  /// Procesa cualquier código detectado por cámara o ingresado manualmente,
+  /// muestra una alerta visual inmediata y consulta el medicamento en openFDA.
   Future<void> _procesarCodigoEscaneado(String rawValue) async {
     if (_procesando) return;
 
     final limpio = rawValue.trim();
     if (limpio.isEmpty) return;
 
+    // Alerta táctil y visual inmediata al detectar un código
+    HapticFeedback.mediumImpact();
+
     setState(() {
       _procesando = true;
       _ultimoCodigoLeido = limpio;
+      _mensajeEstado = 'Código detectado: $limpio. Consultando en openFDA...';
     });
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Código leído: $limpio')),
+          ],
+        ),
+        backgroundColor: const Color(0xFF0F766E),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
 
     try {
       final bool esCodigoBarrasNumerico = RegExp(r'^\d{8,14}$')
@@ -75,6 +115,9 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
       if (!mounted) return;
 
       if (resultados.isNotEmpty) {
+        setState(() {
+          _mensajeEstado = 'Medicamento encontrado: ${resultados.first.nombre}';
+        });
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -83,22 +126,32 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
           ),
         );
       } else if (esCodigoBarrasNumerico) {
-        // Si es una caja colombiana (ej. 770...) que no está en la base de EE. UU.,
-        // permitimos asociarla con el nombre impreso en la caja una sola vez.
+        setState(() {
+          _mensajeEstado =
+              'Código $limpio leído, pero no figura en EE. UU. Vincúlalo abajo.';
+        });
         await _mostrarDialogoVincularCaja(limpio);
       } else {
+        setState(() {
+          _mensajeEstado = 'No se encontraron resultados para "$limpio".';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('No se encontró ningún medicamento para "$limpio".'),
+            backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _mensajeEstado = 'Error al consultar el código: $e';
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al procesar el código: $e'),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -114,8 +167,6 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
     }
   }
 
-  /// Abre un cuadro clínico cuando se escanea el código de barras de una caja local
-  /// (como los códigos 770 de Colombia) para vincularla con su principio activo.
   Future<void> _mostrarDialogoVincularCaja(String codigoBarras) async {
     final controladorNombre = TextEditingController();
 
@@ -217,7 +268,7 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // 1. Encabezado hospitalario del escáner multifunción
+            // 1. Encabezado hospitalario
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -264,7 +315,7 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Apunta la cámara al código de barras (EAN/UPC) de la caja del medicamento o a una etiqueta QR de Medi-Stand.',
+                          'Apunta la cámara al código de barras (EAN/UPC) de la caja o digita los números manualmente.',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.92),
                             fontSize: 13,
@@ -278,7 +329,7 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 2. Visor de cámara con guía panorámica (ideal para códigos de barras)
+            // 2. Visor óptico con indicador de estado en tiempo real
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -302,7 +353,7 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
                           ),
                           SizedBox(width: 8),
                           Text(
-                            'Lector Óptico en Vivo (Barras EAN/UPC y QR)',
+                            'Lector Óptico en Vivo',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -311,110 +362,265 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
                           ),
                         ],
                       ),
-                      Row(
-                        children: [
-                          IconButton.filledTonal(
-                            tooltip: 'Encender / Apagar linterna',
-                            icon: const Icon(
-                              Icons.flashlight_on_rounded,
-                              size: 20,
+                      if (_soportaCamaraNativa)
+                        Row(
+                          children: [
+                            IconButton.filledTonal(
+                              tooltip: 'Reiniciar cámara',
+                              icon: const Icon(Icons.refresh_rounded, size: 20),
+                              onPressed: () async {
+                                await _scannerController.stop();
+                                await _scannerController.start();
+                                if (!mounted) return;
+                                setState(() {
+                                  _mensajeEstado = 'Cámara reiniciada y lista.';
+                                });
+                              },
                             ),
-                            onPressed: () => _scannerController.toggleTorch(),
-                          ),
-                          const SizedBox(width: 6),
-                          IconButton.filledTonal(
-                            tooltip: 'Cambiar cámara',
-                            icon: const Icon(
-                              Icons.cameraswitch_rounded,
-                              size: 20,
+                            const SizedBox(width: 6),
+                            IconButton.filledTonal(
+                              tooltip: 'Encender / Apagar linterna',
+                              icon: const Icon(
+                                Icons.flashlight_on_rounded,
+                                size: 20,
+                              ),
+                              onPressed: () => _scannerController.toggleTorch(),
                             ),
-                            onPressed: () => _scannerController.switchCamera(),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 6),
+                            IconButton.filledTonal(
+                              tooltip: 'Cambiar cámara',
+                              icon: const Icon(
+                                Icons.cameraswitch_rounded,
+                                size: 20,
+                              ),
+                              onPressed: () =>
+                                  _scannerController.switchCamera(),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),
 
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
-                      height: 280,
-                      width: double.infinity,
-                      child: Stack(
-                        alignment: Alignment.center,
+                  // Si está en Windows escritorio, avisamos claramente en lugar de dejar un cuadro mudo
+                  if (!_soportaCamaraNativa)
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFF59E0B)),
+                      ),
+                      child: const Row(
                         children: [
-                          MobileScanner(
-                            controller: _scannerController,
-                            onDetect: (BarcodeCapture capture) {
-                              for (final barcode in capture.barcodes) {
-                                final valor = barcode.rawValue;
-                                if (valor != null && valor.isNotEmpty) {
-                                  _procesarCodigoEscaneado(valor);
-                                  break;
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: Color(0xFFB45309),
+                            size: 28,
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Estás ejecutando la app en Windows Escritorio, donde la cámara nativa no es compatible con este plugin.\nPara usar la cámara web ejecuta en terminal: flutter run -d chrome (o prueba en Android). También puedes digitar el código abajo.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF78350F),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: SizedBox(
+                        height: 280,
+                        width: double.infinity,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            MobileScanner(
+                              controller: _scannerController,
+                              onDetect: (BarcodeCapture capture) {
+                                for (final barcode in capture.barcodes) {
+                                  final valor = barcode.rawValue;
+                                  if (valor != null && valor.isNotEmpty) {
+                                    _procesarCodigoEscaneado(valor);
+                                    break;
+                                  }
                                 }
-                              }
-                            },
-                          ),
-
-                          // Guía rectangular horizontal adaptada a códigos de barras reales
-                          Container(
-                            width: 260,
-                            height: 145,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: const Color(0xFF14B8A6),
-                                width: 3,
-                              ),
+                              },
                             ),
-                            child: Center(
-                              child: Container(
-                                height: 2,
-                                width: 220,
-                                color: Colors.redAccent.withValues(alpha: 0.75),
-                              ),
-                            ),
-                          ),
 
-                          if (_procesando)
+                            // Marco guía horizontal con línea roja central
                             Container(
-                              color: Colors.black.withValues(alpha: 0.65),
+                              width: 270,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFF14B8A6),
+                                  width: 3,
+                                ),
+                              ),
                               child: Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const CircularProgressIndicator(
-                                      color: Colors.white,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'Buscando código: $_ultimoCodigoLeido',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                                child: Container(
+                                  height: 2,
+                                  width: 230,
+                                  color: Colors.redAccent.withValues(
+                                    alpha: 0.85,
+                                  ),
                                 ),
                               ),
                             ),
-                        ],
+
+                            if (_procesando)
+                              Container(
+                                color: Colors.black.withValues(alpha: 0.65),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Buscando código: $_ultimoCodigoLeido',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Alinea las barras verticales del empaque sobre la línea roja del visor.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+
+                  const SizedBox(height: 12),
+
+                  // Banner de estado óptico en tiempo real (siempre visible)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDFA),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF99F6E4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _procesando
+                              ? Icons.sync_rounded
+                              : Icons.sensors_rounded,
+                          size: 18,
+                          color: const Color(0xFF0F766E),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _mensajeEstado,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F766E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // 3. Simulador con códigos de barras reales de medicamentos comerciales
+            // 3. Ingreso manual de código de barras (Plan B si la webcam no enfoca)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFCBD5E1).withValues(alpha: 0.85),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.keyboard_alt_outlined,
+                        color: Color(0xFF0B4F6C),
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Ingreso Manual de Código de Barras',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Si la cámara de tu portátil no logra enfocar las barras pequeñas de la caja, escribe los números que aparecen debajo del código:',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _controladorCodigoManual,
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: (val) => _procesarCodigoEscaneado(val),
+                          decoration: InputDecoration(
+                            hintText: 'Ej. 7702057012345 o 0305730164207',
+                            prefixIcon: const Icon(Icons.tag_rounded),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton.icon(
+                        onPressed: _procesando
+                            ? null
+                            : () => _procesarCodigoEscaneado(
+                                _controladorCodigoManual.text,
+                              ),
+                        icon: const Icon(Icons.search_rounded),
+                        label: const Text('Consultar'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 4. Simulador con códigos de barras reales
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -436,7 +642,7 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
                       ),
                       SizedBox(width: 8),
                       Text(
-                        'Simulador de Códigos de Barras Reales (Demo PC)',
+                        'Simulador de Códigos de Barras Reales (Demo)',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -447,7 +653,7 @@ class _EscanerQrScreenState extends State<EscanerQrScreen> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Pulsa cualquiera de estos códigos de barras comerciales reales para probar la búsqueda automática en openFDA:',
+                    'Pulsa cualquiera de estos códigos comerciales para probar la búsqueda automática en openFDA:',
                     style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                   ),
                   const SizedBox(height: 12),
