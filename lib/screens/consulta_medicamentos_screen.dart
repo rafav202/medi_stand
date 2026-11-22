@@ -32,7 +32,6 @@ class _ConsultaMedicamentosScreenState
   String _ultimaBusquedaEnviada = '';
   String _viaSeleccionada = 'TODAS';
 
-  // Sugerencias rápidas en español (con botón "Todos" para volver al catálogo variado)
   final List<String> _sugerencias = const [
     'Todos',
     'Ibuprofeno',
@@ -57,18 +56,11 @@ class _ConsultaMedicamentosScreenState
     super.dispose();
   }
 
-  /// Se ejecuta cada vez que escribes o borras un carácter en el buscador.
   void _alCambiarTexto(String valor) {
-    // Actualiza la UI al instante para mostrar u ocultar el botón "X"
     setState(() {});
-
-    // Si había un temporizador corriendo de una tecla anterior, lo cancelamos
     _debounceTimer?.cancel();
 
     final textoLimpio = valor.trim();
-
-    // Si el usuario borró todo el texto, recargamos el catálogo general rápido (350 ms)
-    // Si escribió texto, esperamos 550 ms desde su última tecla antes de llamar a la API
     final espera = textoLimpio.isEmpty
         ? const Duration(milliseconds: 350)
         : const Duration(milliseconds: 550);
@@ -82,7 +74,6 @@ class _ConsultaMedicamentosScreenState
     });
   }
 
-  /// Ejecuta búsqueda inmediata cuando el usuario pulsa "Buscar", Enter o un chip rápido.
   void _ejecutarBusquedaInmediata([String? termino]) {
     _debounceTimer?.cancel();
 
@@ -136,16 +127,16 @@ class _ConsultaMedicamentosScreenState
             constraints: const BoxConstraints(maxWidth: 1140),
             child: Column(
               children: [
-                // 1. Cabecera Hero con buscador automático
+                // 1. Cabecera Hero Hospitalaria con trazo ECG decorativo
                 Container(
                   margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  padding: const EdgeInsets.all(20),
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color(0xFF0F766E),
-                        Color(0xFF0D9488),
-                        Color(0xFF14B8A6),
+                        Color(0xFF0B4F6C), // Azul hospitalario profundo
+                        Color(0xFF0F766E), // Verde quirúrgico
+                        Color(0xFF0D9488), // Verde azulado clínico
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -153,193 +144,220 @@ class _ConsultaMedicamentosScreenState
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0D9488).withValues(alpha: 0.22),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+                        color: const Color(0xFF0B4F6C).withValues(alpha: 0.25),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
                       ),
                     ],
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                      // Trazo ECG brillante dentro del banner hospitalario
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(painter: _BannerEcgPainter()),
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.verified_outlined,
-                              color: Colors.white,
-                              size: 14,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Vademécum Académico • openFDA + Traducción ES',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 11,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.28),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.local_hospital_rounded,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Estación Farmacéutica Hospitalaria • openFDA',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Consulta información clínica de medicamentos',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Escribe o borra en el buscador y los resultados se actualizarán automáticamente.',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Consulta clínica y vademécum estudiantil',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Escribe o borra en el buscador para actualizar automáticamente los fármacos en español.',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.92),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
 
-                      // Barra de búsqueda blanca elevada con detección automática al escribir/borrar
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _controladorBusqueda,
-                          textInputAction: TextInputAction.search,
-                          onSubmitted: (_) => _ejecutarBusquedaInmediata(),
-                          onChanged: _alCambiarTexto,
-                          decoration: InputDecoration(
-                            hintText:
-                                'Ej. Ibuprofeno, Amoxicilina, Acetaminofén...',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 14,
-                            ),
-                            prefixIcon: const Icon(
-                              Icons.search_rounded,
-                              color: Color(0xFF0D9488),
-                            ),
-                            suffixIcon: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (_controladorBusqueda.text.isNotEmpty)
-                                  IconButton(
-                                    tooltip: 'Limpiar búsqueda',
-                                    icon: const Icon(Icons.close_rounded),
-                                    onPressed: () =>
-                                        _ejecutarBusquedaInmediata('Todos'),
+                            // Barra de búsqueda blanca elevada
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
                                   ),
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: FilledButton(
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0F172A),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
-                                      ),
-                                    ),
-                                    onPressed: _ejecutarBusquedaInmediata,
-                                    child: const Text('Buscar'),
+                                ],
+                              ),
+                              child: TextField(
+                                controller: _controladorBusqueda,
+                                textInputAction: TextInputAction.search,
+                                onSubmitted: (_) =>
+                                    _ejecutarBusquedaInmediata(),
+                                onChanged: _alCambiarTexto,
+                                decoration: InputDecoration(
+                                  hintText: 'Ej. Ibuprofeno, Amoxicilina, Acetaminofén...',
+                                  hintStyle: const TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 14,
                                   ),
-                                ),
-                              ],
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Botones rápidos personalizados con contraste nítido
-                      SizedBox(
-                        height: 36,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _sugerencias.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final nombre = _sugerencias[index];
-                            final esTodos = nombre == 'Todos';
-
-                            return Material(
-                              color: esTodos
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(20),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(20),
-                                onTap: () => _ejecutarBusquedaInmediata(nombre),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    color: Color(0xFF0D9488),
                                   ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Row(
+                                  suffixIcon: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        esTodos
-                                            ? Icons.apps_rounded
-                                            : Icons.bolt_rounded,
-                                        size: 15,
-                                        color: esTodos
-                                            ? const Color(0xFF0F766E)
-                                            : Colors.white,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        nombre,
-                                        style: TextStyle(
-                                          color: esTodos
-                                              ? const Color(0xFF0F766E)
-                                              : Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
+                                      if (_controladorBusqueda.text.isNotEmpty)
+                                        IconButton(
+                                          tooltip: 'Limpiar búsqueda',
+                                          icon: const Icon(Icons.close_rounded),
+                                          onPressed: () =>
+                                              _ejecutarBusquedaInmediata(
+                                                'Todos',
+                                              ),
+                                        ),
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 6,
+                                        ),
+                                        child: FilledButton(
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: const Color(
+                                              0xFF0F172A,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 10,
+                                            ),
+                                          ),
+                                          onPressed: _ejecutarBusquedaInmediata,
+                                          child: const Text('Buscar'),
                                         ),
                                       ),
                                     ],
                                   ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
                                 ),
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Botones rápidos personalizados
+                            SizedBox(
+                              height: 36,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _sugerencias.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final nombre = _sugerencias[index];
+                                  final esTodos = nombre == 'Todos';
+
+                                  return Material(
+                                    color: esTodos
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(20),
+                                      onTap: () =>
+                                          _ejecutarBusquedaInmediata(nombre),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.45,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              esTodos
+                                                  ? Icons.apps_rounded
+                                                  : Icons.bolt_rounded,
+                                              size: 15,
+                                              color: esTodos
+                                                  ? const Color(0xFF0B4F6C)
+                                                  : Colors.white,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              nombre,
+                                              style: TextStyle(
+                                                color: esTodos
+                                                    ? const Color(0xFF0B4F6C)
+                                                    : Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -374,12 +392,14 @@ class _ConsultaMedicamentosScreenState
                             label: Text(etiqueta),
                             selected: seleccionado,
                             showCheckmark: false,
-                            selectedColor: const Color(0xFF0F172A),
-                            backgroundColor: Colors.white,
+                            selectedColor: const Color(0xFF0B4F6C),
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.92,
+                            ),
                             side: BorderSide(
                               color: seleccionado
-                                  ? const Color(0xFF0F172A)
-                                  : const Color(0xFFE2E8F0),
+                                  ? const Color(0xFF0B4F6C)
+                                  : const Color(0xFFCBD5E1),
                             ),
                             labelStyle: TextStyle(
                               fontSize: 12,
@@ -400,7 +420,7 @@ class _ConsultaMedicamentosScreenState
                   ),
                 ],
 
-                // 3. Cuadrícula de tarjetas de medicamentos
+                // 3. Cuadrícula de tarjetas clínicas translúcidas
                 Expanded(
                   child: _construirCuerpo(medicamentosFiltrados, columnas),
                 ),
@@ -423,8 +443,8 @@ class _ConsultaMedicamentosScreenState
             Text(
               'Consultando medicamentos en openFDA...',
               style: TextStyle(
-                color: Color(0xFF475569),
-                fontWeight: FontWeight.w500,
+                color: Color(0xFF334155),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -439,7 +459,7 @@ class _ConsultaMedicamentosScreenState
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Colors.white.withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFFECACA)),
             ),
@@ -477,7 +497,10 @@ class _ConsultaMedicamentosScreenState
           child: Text(
             'No se encontraron medicamentos con ese filtro o término.\nPrueba con otro nombre como Ibuprofeno o pulsa "Todos".',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF64748B)),
+            style: TextStyle(
+              color: Color(0xFF475569),
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       );
@@ -518,7 +541,7 @@ class _ConsultaMedicamentosScreenState
     final estiloVia = EstiloViaMedicamento.obtener(med.viaPrincipalCorta);
 
     return Material(
-      color: Colors.white,
+      color: Colors.white.withValues(alpha: 0.94),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -534,7 +557,16 @@ class _ConsultaMedicamentosScreenState
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(
+              color: const Color(0xFFCBD5E1).withValues(alpha: 0.85),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -581,7 +613,7 @@ class _ConsultaMedicamentosScreenState
                     child: const Icon(
                       Icons.arrow_outward_rounded,
                       size: 16,
-                      color: Color(0xFF475569),
+                      color: Color(0xFF0B4F6C),
                     ),
                   ),
                 ],
@@ -614,7 +646,7 @@ class _ConsultaMedicamentosScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: color.withValues(alpha: 0.11),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -627,4 +659,37 @@ class _ConsultaMedicamentosScreenState
       ),
     );
   }
+}
+
+/// Dibuja un trazo sutil de monitor cardíaco en la esquina superior derecha del banner.
+class _BannerEcgPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.12)
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path();
+    final double y = size.height * 0.28;
+    final double inicioX = size.width * 0.45;
+
+    path.moveTo(inicioX, y);
+    path.lineTo(inicioX + 60, y);
+    path.lineTo(inicioX + 72, y - 10);
+    path.lineTo(inicioX + 82, y + 12);
+    path.lineTo(inicioX + 94, y - 34);
+    path.lineTo(inicioX + 106, y + 20);
+    path.lineTo(inicioX + 116, y);
+    path.lineTo(inicioX + 145, y);
+    path.quadraticBezierTo(inicioX + 160, y - 14, inicioX + 175, y);
+    path.lineTo(size.width, y);
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

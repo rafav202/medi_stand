@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../models/medicamento.dart';
 import '../services/medicamento_service.dart';
+import '../widgets/fondo_hospitalario.dart';
 import '../widgets/medi_stand_logo.dart';
 import '../widgets/medicamento_visual.dart';
 
@@ -59,7 +60,6 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
   Future<void> _traducirFichaAlEspanol() async {
     final med = widget.medicamento;
 
-    // Traducimos las 5 secciones clínicas en paralelo para máxima velocidad
     final resultados = await Future.wait<String>([
       _servicio.traducirTexto(med.indicaciones),
       _servicio.traducirTexto(med.dosificacion),
@@ -98,105 +98,107 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
   Widget build(BuildContext context) {
     final med = widget.medicamento;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const MediStandLogo(subtitulo: 'Ficha Clínica'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ActionChip(
-              avatar: _traduciendo
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.translate_rounded, size: 16),
-              label: Text(
-                _traduciendo
-                    ? 'Traduciendo...'
-                    : (_mostrarEnEspanol ? 'Español' : 'Inglés (Original)'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+    return FondoHospitalario(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const MediStandLogo(subtitulo: 'Historia Farmacológica'),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: ActionChip(
+                avatar: _traduciendo
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.translate_rounded, size: 16),
+                label: Text(
+                  _traduciendo
+                      ? 'Traduciendo...'
+                      : (_mostrarEnEspanol ? 'Español' : 'Inglés (Original)'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                onPressed: _traduciendo
+                    ? null
+                    : () {
+                        setState(() {
+                          _mostrarEnEspanol = !_mostrarEnEspanol;
+                        });
+                      },
               ),
-              onPressed: _traduciendo
-                  ? null
-                  : () {
-                      setState(() {
-                        _mostrarEnEspanol = !_mostrarEnEspanol;
-                      });
-                    },
+            ),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(
+              height: 1,
+              color: const Color(0xFFCBD5E1).withValues(alpha: 0.7),
             ),
           ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFFE2E8F0)),
         ),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 920),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Banner visual + galería de fotos del medicamento
-              MedicamentoBannerVisual(
-                medicamento: med,
-                urlsImagenes: _urlsImagenes,
-                cargandoImagenes: _cargandoImagenes,
-              ),
-              const SizedBox(height: 14),
-
-              // Secciones clínicas detalladas en español (con opción de ver original)
-              _seccionInfo(
-                context,
-                titulo: 'Indicaciones y uso',
-                contenido: _mostrarEnEspanol
-                    ? _indicacionesEs
-                    : med.indicaciones,
-                icono: Icons.info_outline_rounded,
-                color: const Color(0xFF0D9488),
-              ),
-              _seccionInfo(
-                context,
-                titulo: 'Dosificación y administración',
-                contenido: _mostrarEnEspanol
-                    ? _dosificacionEs
-                    : med.dosificacion,
-                icono: Icons.schedule_rounded,
-                color: const Color(0xFF2563EB),
-              ),
-              _seccionInfo(
-                context,
-                titulo: 'Advertencias y precauciones',
-                contenido: _mostrarEnEspanol
-                    ? _advertenciasEs
-                    : med.advertencias,
-                icono: Icons.warning_amber_rounded,
-                color: const Color(0xFFD97706),
-              ),
-              _seccionInfo(
-                context,
-                titulo: 'Contraindicaciones',
-                contenido: _mostrarEnEspanol
-                    ? _contraindicacionesEs
-                    : med.contraindicaciones,
-                icono: Icons.block_rounded,
-                color: const Color(0xFFDC2626),
-              ),
-              _seccionInfo(
-                context,
-                titulo: 'Reacciones o efectos adversos',
-                contenido: _mostrarEnEspanol
-                    ? _efectosAdversosEs
-                    : med.efectosAdversos,
-                icono: Icons.health_and_safety_outlined,
-                color: const Color(0xFF7C3AED),
-              ),
-            ],
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                MedicamentoBannerVisual(
+                  medicamento: med,
+                  urlsImagenes: _urlsImagenes,
+                  cargandoImagenes: _cargandoImagenes,
+                ),
+                const SizedBox(height: 14),
+                _seccionInfo(
+                  context,
+                  titulo: 'Indicaciones y uso',
+                  contenido: _mostrarEnEspanol
+                      ? _indicacionesEs
+                      : med.indicaciones,
+                  icono: Icons.info_outline_rounded,
+                  color: const Color(0xFF0D9488),
+                ),
+                _seccionInfo(
+                  context,
+                  titulo: 'Dosificación y administración',
+                  contenido: _mostrarEnEspanol
+                      ? _dosificacionEs
+                      : med.dosificacion,
+                  icono: Icons.schedule_rounded,
+                  color: const Color(0xFF2563EB),
+                ),
+                _seccionInfo(
+                  context,
+                  titulo: 'Advertencias y precauciones',
+                  contenido: _mostrarEnEspanol
+                      ? _advertenciasEs
+                      : med.advertencias,
+                  icono: Icons.warning_amber_rounded,
+                  color: const Color(0xFFD97706),
+                ),
+                _seccionInfo(
+                  context,
+                  titulo: 'Contraindicaciones',
+                  contenido: _mostrarEnEspanol
+                      ? _contraindicacionesEs
+                      : med.contraindicaciones,
+                  icono: Icons.block_rounded,
+                  color: const Color(0xFFDC2626),
+                ),
+                _seccionInfo(
+                  context,
+                  titulo: 'Reacciones o efectos adversos',
+                  contenido: _mostrarEnEspanol
+                      ? _efectosAdversosEs
+                      : med.efectosAdversos,
+                  icono: Icons.health_and_safety_outlined,
+                  color: const Color(0xFF7C3AED),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -214,9 +216,18 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: const Color(0xFFCBD5E1).withValues(alpha: 0.8),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -253,7 +264,7 @@ class _DetalleMedicamentoScreenState extends State<DetalleMedicamentoScreen> {
               ),
             ],
           ),
-          const Divider(height: 22, color: Color(0xFFF1F5F9)),
+          const Divider(height: 22, color: Color(0xFFE2E8F0)),
           Text(
             contenido,
             style: const TextStyle(
