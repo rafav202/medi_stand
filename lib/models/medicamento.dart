@@ -25,7 +25,6 @@ class Medicamento {
     required this.efectosAdversos,
   });
 
-  /// Convierte de forma segura cualquier dato del JSON en un texto limpio.
   static String _textoSeguro(dynamic dato, String porDefecto) {
     if (dato == null) {
       return porDefecto;
@@ -46,18 +45,40 @@ class Medicamento {
     return textoLimpio.isEmpty ? porDefecto : textoLimpio;
   }
 
-  /// Toma la primera vía de administración corta para agrupar en las gráficas y filtros.
+  /// Vía principal en español para mostrar en tarjetas, filtros y gráficas.
   String get viaPrincipalCorta {
     final primeraLinea = viaAdministracion.split('\n').first.trim();
-    final primeraVia = primeraLinea.split(',').first.trim();
-    if (primeraVia.isEmpty) return 'NO REGISTRADA';
-    return primeraVia.toUpperCase();
+    final primeraVia = primeraLinea.split(',').first.trim().toUpperCase();
+    if (primeraVia.isEmpty || primeraVia == 'NO REGISTRADA') {
+      return 'NO REGISTRADA';
+    }
+    if (primeraVia.contains('ORAL')) return 'ORAL';
+    if (primeraVia.contains('TOPICAL')) return 'TÓPICA';
+    if (primeraVia.contains('OPHTHALMIC')) return 'OFTÁLMICA';
+    if (primeraVia.contains('INTRAVENOUS')) return 'INTRAVENOSA';
+    if (primeraVia.contains('INJECTION') ||
+        primeraVia.contains('SUBCUTANEOUS')) {
+      return 'INYECTABLE';
+    }
+    if (primeraVia.contains('NASAL')) return 'NASAL';
+    if (primeraVia.contains('RESPIRATORY') ||
+        primeraVia.contains('INHALATION')) {
+      return 'INHALATORIA';
+    }
+    return primeraVia;
   }
 
   /// Indica si el medicamento es de venta libre (OTC) o requiere fórmula médica.
   bool get esVentaLibre => formaFarmaceutica.toUpperCase().contains('OTC');
 
-  /// Construye un objeto Medicamento a partir de un elemento JSON de openFDA.
+  /// Tipo de dispensación legible en español.
+  String get tipoDispensacionEspanol {
+    final tipo = formaFarmaceutica.toUpperCase();
+    if (tipo.contains('OTC')) return 'Venta Libre (OTC)';
+    if (tipo.contains('PRESCRIPTION')) return 'Fórmula Médica (Rx)';
+    return formaFarmaceutica;
+  }
+
   factory Medicamento.fromOpenFdaJson(Map<String, dynamic> json) {
     final Map<String, dynamic> openFda = json['openfda'] is Map<String, dynamic>
         ? json['openfda'] as Map<String, dynamic>

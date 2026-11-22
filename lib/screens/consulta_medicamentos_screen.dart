@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/medicamento.dart';
@@ -26,14 +28,18 @@ class ConsultaMedicamentosScreen extends StatefulWidget {
 class _ConsultaMedicamentosScreenState
     extends State<ConsultaMedicamentosScreen> {
   final TextEditingController _controladorBusqueda = TextEditingController();
+  Timer? _debounceTimer;
+  String _ultimaBusquedaEnviada = '';
   String _viaSeleccionada = 'TODAS';
 
+  // Sugerencias rápidas en español (con botón "Todos" para volver al catálogo variado)
   final List<String> _sugerencias = const [
-    'Ibuprofen',
-    'Amoxicillin',
-    'Acetaminophen',
-    'Aspirin',
-    'Omeprazole',
+    'Todos',
+    'Ibuprofeno',
+    'Amoxicilina',
+    'Acetaminofén',
+    'Aspirina',
+    'Omeprazol',
   ];
 
   @override
@@ -46,15 +52,55 @@ class _ConsultaMedicamentosScreenState
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _controladorBusqueda.dispose();
     super.dispose();
   }
 
-  void _ejecutarBusqueda([String? termino]) {
-    final texto = termino ?? _controladorBusqueda.text;
+  /// Se ejecuta cada vez que escribes o borras un carácter en el buscador.
+  void _alCambiarTexto(String valor) {
+    // Actualiza la UI al instante para mostrar u ocultar el botón "X"
+    setState(() {});
+
+    // Si había un temporizador corriendo de una tecla anterior, lo cancelamos
+    _debounceTimer?.cancel();
+
+    final textoLimpio = valor.trim();
+
+    // Si el usuario borró todo el texto, recargamos el catálogo general rápido (350 ms)
+    // Si escribió texto, esperamos 550 ms desde su última tecla antes de llamar a la API
+    final espera = textoLimpio.isEmpty
+        ? const Duration(milliseconds: 350)
+        : const Duration(milliseconds: 550);
+
+    _debounceTimer = Timer(espera, () {
+      if (!mounted) return;
+      if (textoLimpio != _ultimaBusquedaEnviada) {
+        _ultimaBusquedaEnviada = textoLimpio;
+        widget.onBuscar(textoLimpio);
+      }
+    });
+  }
+
+  /// Ejecuta búsqueda inmediata cuando el usuario pulsa "Buscar", Enter o un chip rápido.
+  void _ejecutarBusquedaInmediata([String? termino]) {
+    _debounceTimer?.cancel();
+
+    if (termino == 'Todos') {
+      _controladorBusqueda.clear();
+      setState(() {});
+      _ultimaBusquedaEnviada = '';
+      widget.onBuscar('');
+      return;
+    }
+
+    final texto = (termino ?? _controladorBusqueda.text).trim();
     if (termino != null) {
       _controladorBusqueda.text = termino;
+      setState(() {});
     }
+
+    _ultimaBusquedaEnviada = texto;
     widget.onBuscar(texto);
   }
 
@@ -80,112 +126,307 @@ class _ConsultaMedicamentosScreenState
     final viasDisponibles = _obtenerViasDisponibles();
     final medicamentosFiltrados = _filtrarMedicamentos();
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: TextField(
-            controller: _controladorBusqueda,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _ejecutarBusqueda(),
-            decoration: InputDecoration(
-              labelText: 'Buscar medicamento (ej. Ibuprofen, Aspirin)',
-              hintText: 'Nombre comercial o principio activo...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_controladorBusqueda.text.isNotEmpty)
-                    IconButton(
-                      tooltip: 'Limpiar',
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _controladorBusqueda.clear();
-                        setState(() {});
-                        _ejecutarBusqueda('');
-                      },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final ancho = constraints.maxWidth;
+        final int columnas = ancho >= 1050 ? 3 : (ancho >= 680 ? 2 : 1);
+
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1140),
+            child: Column(
+              children: [
+                // 1. Cabecera Hero con buscador automático
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF0F766E),
+                        Color(0xFF0D9488),
+                        Color(0xFF14B8A6),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  IconButton(
-                    tooltip: 'Buscar',
-                    icon: const Icon(Icons.arrow_forward),
-                    onPressed: _ejecutarBusqueda,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0D9488).withValues(alpha: 0.22),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.verified_outlined,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Vademécum Académico • openFDA + Traducción ES',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Consulta información clínica de medicamentos',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Escribe o borra en el buscador y los resultados se actualizarán automáticamente.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Barra de búsqueda blanca elevada con detección automática al escribir/borrar
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _controladorBusqueda,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: (_) => _ejecutarBusquedaInmediata(),
+                          onChanged: _alCambiarTexto,
+                          decoration: InputDecoration(
+                            hintText:
+                                'Ej. Ibuprofeno, Amoxicilina, Acetaminofén...',
+                            hintStyle: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 14,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              color: Color(0xFF0D9488),
+                            ),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_controladorBusqueda.text.isNotEmpty)
+                                  IconButton(
+                                    tooltip: 'Limpiar búsqueda',
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () =>
+                                        _ejecutarBusquedaInmediata('Todos'),
+                                  ),
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0F172A),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    onPressed: _ejecutarBusquedaInmediata,
+                                    child: const Text('Buscar'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Botones rápidos personalizados con contraste nítido
+                      SizedBox(
+                        height: 36,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _sugerencias.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final nombre = _sugerencias[index];
+                            final esTodos = nombre == 'Todos';
+
+                            return Material(
+                              color: esTodos
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(20),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () => _ejecutarBusquedaInmediata(nombre),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        esTodos
+                                            ? Icons.apps_rounded
+                                            : Icons.bolt_rounded,
+                                        size: 15,
+                                        color: esTodos
+                                            ? const Color(0xFF0F766E)
+                                            : Colors.white,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        nombre,
+                                        style: TextStyle(
+                                          color: esTodos
+                                              ? const Color(0xFF0F766E)
+                                              : Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 2. Barra de filtros por vía de administración
+                if (!widget.cargando &&
+                    widget.error == null &&
+                    widget.medicamentos.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                    child: SizedBox(
+                      height: 38,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: viasDisponibles.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final via = viasDisponibles[index];
+                          final seleccionado = _viaSeleccionada == via;
+                          final cantidad = via == 'TODAS'
+                              ? widget.medicamentos.length
+                              : widget.medicamentos
+                                    .where((m) => m.viaPrincipalCorta == via)
+                                    .length;
+                          final etiqueta = via == 'TODAS'
+                              ? 'Todas ($cantidad)'
+                              : '$via ($cantidad)';
+
+                          return ChoiceChip(
+                            label: Text(etiqueta),
+                            selected: seleccionado,
+                            showCheckmark: false,
+                            selectedColor: const Color(0xFF0F172A),
+                            backgroundColor: Colors.white,
+                            side: BorderSide(
+                              color: seleccionado
+                                  ? const Color(0xFF0F172A)
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                            labelStyle: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: seleccionado
+                                  ? Colors.white
+                                  : const Color(0xFF334155),
+                            ),
+                            onSelected: (_) {
+                              setState(() {
+                                _viaSeleccionada = via;
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ],
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-        ),
-        SizedBox(
-          height: 42,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: _sugerencias.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final nombre = _sugerencias[index];
-              return ActionChip(
-                avatar: const Icon(Icons.bolt, size: 16),
-                label: Text(nombre),
-                onPressed: () => _ejecutarBusqueda(nombre),
-              );
-            },
-          ),
-        ),
-        if (!widget.cargando &&
-            widget.error == null &&
-            widget.medicamentos.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 42,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: viasDisponibles.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final via = viasDisponibles[index];
-                final cantidad = via == 'TODAS'
-                    ? widget.medicamentos.length
-                    : widget.medicamentos
-                          .where((m) => m.viaPrincipalCorta == via)
-                          .length;
-                final etiqueta = via == 'TODAS'
-                    ? 'Todas ($cantidad)'
-                    : '$via ($cantidad)';
 
-                return ChoiceChip(
-                  label: Text(etiqueta),
-                  selected: _viaSeleccionada == via,
-                  onSelected: (_) {
-                    setState(() {
-                      _viaSeleccionada = via;
-                    });
-                  },
-                );
-              },
+                // 3. Cuadrícula de tarjetas de medicamentos
+                Expanded(
+                  child: _construirCuerpo(medicamentosFiltrados, columnas),
+                ),
+              ],
             ),
           ),
-        ],
-        const SizedBox(height: 8),
-        Expanded(child: _construirCuerpo(medicamentosFiltrados)),
-      ],
+        );
+      },
     );
   }
 
-  Widget _construirCuerpo(List<Medicamento> listaMostrar) {
+  Widget _construirCuerpo(List<Medicamento> listaMostrar, int columnas) {
     if (widget.cargando) {
       return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Consultando medicamentos en openFDA...'),
+            SizedBox(height: 14),
+            Text(
+              'Consultando medicamentos en openFDA...',
+              style: TextStyle(
+                color: Color(0xFF475569),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       );
@@ -195,19 +436,35 @@ class _ConsultaMedicamentosScreenState
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.wifi_off, size: 48, color: Colors.redAccent),
-              const SizedBox(height: 12),
-              Text(widget.error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => _ejecutarBusqueda(),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-              ),
-            ],
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.wifi_off_rounded,
+                  size: 48,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFF334155)),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => _ejecutarBusquedaInmediata(),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -218,91 +475,153 @@ class _ConsultaMedicamentosScreenState
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'No se encontraron medicamentos con ese filtro o término.\nPrueba con otro nombre como Ibuprofen o selecciona "Todas".',
+            'No se encontraron medicamentos con ese filtro o término.\nPrueba con otro nombre como Ibuprofeno o pulsa "Todos".',
             textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF64748B)),
           ),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      itemCount: listaMostrar.length,
-      itemBuilder: (context, index) {
-        final med = listaMostrar[index];
-        final estiloVia = EstiloViaMedicamento.obtener(med.viaPrincipalCorta);
+    final int totalFilas = (listaMostrar.length / columnas).ceil();
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 10,
-            ),
-            leading: MedicamentoAvatar(medicamento: med),
-            title: Text(
-              med.nombre,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Text(
-                  'Principio activo: ${med.principioActivo}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    _etiquetaMini(
-                      texto: med.viaPrincipalCorta,
-                      color: estiloVia.color,
-                    ),
-                    _etiquetaMini(
-                      texto: med.esVentaLibre
-                          ? 'Venta Libre (OTC)'
-                          : 'Fórmula Médica',
-                      color: med.esVentaLibre
-                          ? Colors.green.shade700
-                          : Colors.deepPurple,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DetalleMedicamentoScreen(medicamento: med),
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+      itemCount: totalFilas,
+      itemBuilder: (context, filaIndex) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: List.generate(columnas, (colIndex) {
+              final itemIndex = filaIndex * columnas + colIndex;
+              if (itemIndex >= listaMostrar.length) {
+                return const Expanded(child: SizedBox.shrink());
+              }
+              final med = listaMostrar[itemIndex];
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: colIndex < columnas - 1 ? 12 : 0,
+                  ),
+                  child: _tarjetaMedicamentoModerna(context, med),
                 ),
               );
-            },
+            }),
           ),
         );
       },
     );
   }
 
+  Widget _tarjetaMedicamentoModerna(BuildContext context, Medicamento med) {
+    final estiloVia = EstiloViaMedicamento.obtener(med.viaPrincipalCorta);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DetalleMedicamentoScreen(medicamento: med),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MedicamentoAvatar(medicamento: med, radio: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          med.nombre,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          med.principioActivo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_outward_rounded,
+                      size: 16,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _etiquetaMini(
+                    texto: med.viaPrincipalCorta,
+                    color: estiloVia.color,
+                  ),
+                  _etiquetaMini(
+                    texto: med.tipoDispensacionEspanol,
+                    color: med.esVentaLibre
+                        ? const Color(0xFF059669)
+                        : const Color(0xFF6D28D9),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _etiquetaMini({required String texto, required Color color}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         texto,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
           color: color,
         ),
       ),
