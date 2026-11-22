@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../models/medicamento.dart';
+import '../widgets/prediccion_mineria_card.dart';
 
 class GraficasScreen extends StatelessWidget {
   final List<Medicamento> medicamentos;
@@ -48,13 +49,38 @@ class GraficasScreen extends StatelessWidget {
     }
 
     if (medicamentos.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'No hay datos suficientes para graficar.\nRealiza primero una búsqueda en la pestaña Medicamentos.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF64748B)),
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1140),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: Color(0xFF64748B)),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Realiza una búsqueda en la pestaña Medicamentos para ver también las gráficas de distribución por vía y tipo.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const PrediccionMineriaCard(),
+            ],
           ),
         ),
       );
@@ -161,6 +187,10 @@ class GraficasScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   tarjetaCircular,
                 ],
+                const SizedBox(height: 16),
+
+                // 3. Gráfica predictiva conectada a MySQL Workbench + Python
+                const PrediccionMineriaCard(),
               ],
             ),
           ),
